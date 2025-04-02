@@ -26,6 +26,14 @@ const EXAMPLE_QUERIES = [
   {
     title: "Convert currency",
     subtitle: "100 USD to EUR"
+  },
+  {
+    title: "Bitcoin price",
+    subtitle: "and market information"
+  },
+  {
+    title: "Show me stock data",
+    subtitle: "for Tesla (TSLA)"
   }
 ];
 
@@ -155,15 +163,20 @@ export function Chat({ sessionId }: ChatProps) {
       console.log(`Response time: ${responseTime.toFixed(2)}s`);
       console.log('Response data:', data);
       
-      // Check if the response contains special data objects
-      const hasComponentData = data.weather_data || data.earthquake_data || data.exchange_rate_data;
-      
-      // If we have component data, store the entire JSON response in the message content
+      // Yeni API yanıt formatını kontrol et (content içeren veya içermeyen)
       let messageContent = '';
-      if (hasComponentData) {
+      if (data.content) {
+        // Tam JSON yanıtı içerik olarak kullan 
+        messageContent = data.content;
+        console.log('Using full JSON content for message');
+      } else if (data.weather_data || data.earthquake_data || data.exchange_rate_data || data.coin_data || data.stock_data) {
+        // Uyumluluk için eski format - tüm JSON yanıtı al
         messageContent = JSON.stringify(data);
+        console.log('Using legacy format JSON for message');
       } else {
+        // Sadece metin yanıtı
         messageContent = data.text || '';
+        console.log('Using text-only response');
       }
       
       // Update message with the response text

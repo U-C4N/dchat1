@@ -6,6 +6,8 @@ import { Chat } from '@/components/chat/Chat';
 import { supabase } from '@/lib/supabase/client';
 import { useChatStore } from '@/lib/store';
 import { MessageSquare } from 'lucide-react';
+import { CoinComponent } from '@/components/CoinComponent';
+import { StockComponent } from '@/components/StockComponent';
 
 export default function SessionPage() {
   const params = useParams();

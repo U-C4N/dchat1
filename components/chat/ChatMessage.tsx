@@ -7,6 +7,8 @@ import { atomDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { Weather } from '@/components/WeatherComponent';
 import { Earthquake } from '@/components/EarthquakeComponent';
 import { ExchangeRateComponent } from '@/components/ExchangeRateComponent';
+import { CoinComponent } from '@/components/CoinComponent';
+import { StockComponent } from '@/components/StockComponent';
 import { useState, useEffect } from 'react';
 import { File, ExternalLink, Copy, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -22,7 +24,9 @@ export function ChatMessage({ message, isLoading = false }: ChatMessageProps) {
   const [weatherData, setWeatherData] = useState<any>(null);
   const [earthquakeData, setEarthquakeData] = useState<any>(null);
   const [exchangeRateData, setExchangeRateData] = useState<any>(null);
-  const [messageText, setMessageText] = useState<string>(message.content);
+  const [coinData, setCoinData] = useState<any>(null);
+  const [stockData, setStockData] = useState<any>(null);
+  const [messageText, setMessageText] = useState<string>(message.content || '');
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
@@ -67,43 +71,57 @@ export function ChatMessage({ message, isLoading = false }: ChatMessageProps) {
           try {
             const parsedContent = JSON.parse(trimmedContent);
             
-            // weather_data özelliği var mı kontrol et
+            // Hata ayıklama için içeriği konsola yazdır
+            console.log("[DEBUG] Parsed message content:", parsedContent);
+            
+            // Tüm veri türlerini başlangıçta sıfırla
+            setWeatherData(null);
+            setEarthquakeData(null);
+            setExchangeRateData(null);
+            setCoinData(null);
+            setStockData(null);
+            
+            // İlgili veri tipine göre state'i güncelle
             if (parsedContent.weather_data) {
               setWeatherData(parsedContent.weather_data);
-              setEarthquakeData(null); // Deprem verisi sıfırla
-              setExchangeRateData(null); // Döviz kuru verisi sıfırla
-              
-              // Sadece metin kısmını göster
               if (parsedContent.text) {
                 setMessageText(parsedContent.text);
               } else {
                 setMessageText("İşte hava durumu bilgisi:");
               }
             } 
-            // earthquake_data özelliği var mı kontrol et
             else if (parsedContent.earthquake_data) {
               setEarthquakeData(parsedContent.earthquake_data);
-              setWeatherData(null); // Hava durumu verisi sıfırla
-              setExchangeRateData(null); // Döviz kuru verisi sıfırla
-              
-              // Sadece metin kısmını göster
               if (parsedContent.text) {
                 setMessageText(parsedContent.text);
               } else {
                 setMessageText("İşte deprem bilgisi:");
               }
             }
-            // exchange_rate_data özelliği var mı kontrol et
             else if (parsedContent.exchange_rate_data) {
               setExchangeRateData(parsedContent.exchange_rate_data);
-              setWeatherData(null); // Hava durumu verisi sıfırla
-              setEarthquakeData(null); // Deprem verisi sıfırla
-              
-              // Sadece metin kısmını göster
               if (parsedContent.text) {
                 setMessageText(parsedContent.text);
               } else {
                 setMessageText("İşte döviz kuru bilgisi:");
+              }
+            }
+            else if (parsedContent.coin_data) {
+              console.log("[DEBUG] Coin data:", parsedContent.coin_data);
+              setCoinData(parsedContent.coin_data);
+              if (parsedContent.text) {
+                setMessageText(parsedContent.text);
+              } else {
+                setMessageText("İşte kripto para bilgisi:");
+              }
+            }
+            else if (parsedContent.stock_data) {
+              console.log("[DEBUG] Stock data:", parsedContent.stock_data);
+              setStockData(parsedContent.stock_data);
+              if (parsedContent.text) {
+                setMessageText(parsedContent.text);
+              } else {
+                setMessageText("İşte hisse senedi bilgisi:");
               }
             }
             else {
@@ -256,6 +274,8 @@ export function ChatMessage({ message, isLoading = false }: ChatMessageProps) {
                                formattedContent.includes("to") ||
                                (formattedContent.match(/\d+\s*[A-Z]{3}/) !== null)
                 }} />}
+                {coinData && <CoinComponent coinData={coinData} />}
+                {stockData && <StockComponent stockData={stockData} />}
               </>
             )}
           </div>

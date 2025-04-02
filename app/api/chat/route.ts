@@ -1,6 +1,6 @@
 import { generateText, Message, CoreMessage, ToolCallPart, ToolResultPart } from 'ai';
 import { deepseek } from '@ai-sdk/deepseek';
-import { getWeather, getEarthquake, getExchangeRate } from '@/lib/ai/tools';
+import { getWeather, getEarthquake, getExchangeRate, getCoin, getStock } from '@/lib/ai/tools';
 import { supabase } from '@/lib/supabase/client';
 import { z } from 'zod';
 
@@ -123,7 +123,9 @@ Depremlerle ilgili sorularda, kullanıcının mesajından lokasyon bilgisini tes
 
 Global, dünya, dünya geneli, tüm dünya gibi ifadeler gördüğünde, getEarthquake fonksiyonunda varsayılan olarak search_type=location, location="Turkey" ve radius=1000 parametrelerini kullan.
 
-Kullanıcı özellikle sorduğunda hava durumu, deprem bilgisi ve döviz kuru özelliklerini kullanabilirsin.`
+Kullanıcı özellikle sorduğunda hava durumu, deprem bilgisi, döviz kuru, kripto para ve hisse senedi bilgilerini sağlayabilirsin.
+
+Kripto paralar için getCoin, hisse senetleri için getStock aracını kullanabilirsin.`
     });
     
     try {
@@ -131,7 +133,9 @@ Kullanıcı özellikle sorduğunda hava durumu, deprem bilgisi ve döviz kuru ö
       console.log('[CHAT API] Available tools:', {
         weather: getWeather ? 'Available' : 'Not found',
         earthquake: getEarthquake ? 'Available' : 'Not found',
-        exchangeRate: getExchangeRate ? 'Available' : 'Not found'
+        exchangeRate: getExchangeRate ? 'Available' : 'Not found',
+        coin: getCoin ? 'Available' : 'Not found',
+        stock: getStock ? 'Available' : 'Not found'
       });
       
       // DeepSeek model
@@ -145,7 +149,7 @@ Kullanıcı özellikle sorduğunda hava durumu, deprem bilgisi ve döviz kuru ö
         model: deepseekModel,
         messages: formattedMessages as CoreMessage[],
         temperature: 0.7,
-        tools: { getWeather, getEarthquake, getExchangeRate },
+        tools: { getWeather, getEarthquake, getExchangeRate, getCoin, getStock },
       });
       
       // Check if the initial result included tool calls AND results
@@ -176,9 +180,15 @@ Kullanıcı özellikle sorduğunda hava durumu, deprem bilgisi ve döviz kuru ö
                 result: toolResult.result
               }
             ]
-          }))
+          })),
         ];
 
+        // Log the tool results for debugging
+        console.log('[CHAT API] Tool results:', initialResult.toolResults.map(tr => ({
+          toolName: tr.toolName,
+          resultSummary: tr.result ? typeof tr.result : 'null'
+        })));
+        
         // İkinci çağrı: streamsiz, düz JSON yanıt oluştur
         console.log('[CHAT API] Generating final NON-STREAMING response based on tool results');
         const finalResult = await generateText({
@@ -255,6 +265,16 @@ Kullanıcı özellikle sorduğunda hava durumu, deprem bilgisi ve döviz kuru ö
               response.exchange_rate_data = exchangeData;
               response.text = "İşte döviz kuru bilgisi:";
             }
+          } else if (toolResult.toolName === 'getCoin') {
+            // Kripto para verilerini işle
+            console.log('[CHAT API] Received coin data:', JSON.stringify(toolResult.result).substring(0, 200) + '...');
+            response.coin_data = toolResult.result;
+            response.text = "İşte kripto para bilgisi:";
+          } else if (toolResult.toolName === 'getStock') {
+            // Hisse senedi verilerini işle
+            console.log('[CHAT API] Received stock data:', JSON.stringify(toolResult.result).substring(0, 200) + '...');
+            response.stock_data = toolResult.result;
+            response.text = "İşte hisse senedi bilgisi:";
           }
         }
         
@@ -265,8 +285,21 @@ Kullanıcı özellikle sorduğunda hava durumu, deprem bilgisi ve döviz kuru ö
           response.text = "İşte deprem bilgisi:";
         }
         
+        // Log the final response structure
+        console.log('[CHAT API] Response structure:', Object.keys(response));
+        console.log('[CHAT API] Has coin data:', !!response.coin_data);
+        console.log('[CHAT API] Has stock data:', !!response.stock_data);
+        
+        // ÖNEMLİ: Front-end için tüm yanıtı mesaj içeriği olarak JSON formatında gönder
+        const finalResponseForClient = {
+          text: response.text,
+          content: JSON.stringify(response)
+        };
+        
+        console.log('[CHAT API] Sending final JSON response to client');
+        
         return new Response(
-          JSON.stringify(response), 
+          JSON.stringify(finalResponseForClient), 
           { 
             status: 200,
             headers: { 'Content-Type': 'application/json' }
