@@ -237,7 +237,7 @@ export function Chat({ sessionId }: ChatProps) {
   // If no sessionId yet, show a loading state
   if (!sessionId) {
     return (
-      <div className="flex items-center justify-center h-screen bg-white">
+      <div className="flex items-center justify-center h-screen bg-foreground/5">
         <div className="animate-pulse flex flex-col items-center">
           <div className="w-12 h-12 rounded-full bg-gray-200 mb-3"></div>
           <div className="h-4 w-24 bg-gray-200 rounded-md"></div>
@@ -247,10 +247,10 @@ export function Chat({ sessionId }: ChatProps) {
   }
 
   return (
-    <div className="flex h-screen bg-white overflow-hidden">
+    <div className="flex h-screen bg-foreground/5 overflow-hidden">
       {/* Sidebar with proper toggle behavior */}
       {sidebarOpen && (
-        <div className="h-full w-72 min-w-[250px] bg-white border-r border-gray-100 shadow-sm transition-all duration-300 z-30 absolute md:relative">
+        <div className="h-full w-72 min-w-[250px] bg-foreground/5 border-r border-gray-100 shadow-sm transition-all duration-300 z-30 absolute md:relative">
           <Sidebar sessionId={sessionId} />
         </div>
       )}
@@ -258,7 +258,7 @@ export function Chat({ sessionId }: ChatProps) {
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col h-full w-full overflow-hidden">
         {/* Chat Header */}
-        <div className="flex items-center px-5 py-4 bg-white sticky top-0 z-20 border-b border-gray-100">
+        <div className="flex items-center px-5 py-4 bg-foreground/5 sticky top-0 z-20 border-b border-gray-100">
           <Button
             variant="ghost"
             size="icon"
@@ -277,7 +277,7 @@ export function Chat({ sessionId }: ChatProps) {
         </div>
         
         {/* Messages Area */}
-        <div className="flex-1 overflow-y-auto px-4 py-6 md:px-8 space-y-6 bg-white">
+        <div className="flex-1 overflow-y-auto px-4 py-6 md:px-8 space-y-6 bg-foreground/5">
           {showExamples && messages[sessionId]?.length === 0 && (
             <div className="flex flex-col items-center justify-center h-full max-w-3xl mx-auto -mt-20">
               <div className="mb-8 flex items-center">
@@ -301,7 +301,7 @@ export function Chat({ sessionId }: ChatProps) {
                 {EXAMPLE_QUERIES.map((example, index) => (
                   <button
                     key={index}
-                    className="text-left p-5 bg-white border border-gray-200 rounded-xl hover:border-black hover:shadow-sm transition-all duration-200"
+                    className="text-left p-5 bg-foreground/5 border border-gray-200 rounded-xl hover:border-black hover:shadow-sm transition-all duration-200"
                     onClick={() => handleExampleClick(example)}
                   >
                     <p className="font-medium text-black mb-1">{example.title}</p>
@@ -323,7 +323,7 @@ export function Chat({ sessionId }: ChatProps) {
         </div>
         
         {/* Input Area */}
-        <div className="bg-white sticky bottom-0 z-10 w-full p-4 md:p-5 border-l border-r border-gray-100">
+        <div className="bg-foreground/5 sticky bottom-0 z-10 w-full p-4 md:p-5 border-l border-r border-gray-100">
           <ChatInput 
             sessionId={sessionId} 
             onSend={handleSendMessage} 

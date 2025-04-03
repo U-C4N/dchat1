@@ -137,8 +137,8 @@ export function Sidebar({ sessionId }: SidebarProps) {
         key={session.id}
         className={`py-2.5 px-3 rounded-lg cursor-pointer mb-1.5 group flex items-center justify-between transition-colors ${
           isActive 
-            ? 'bg-black text-white' 
-            : 'hover:bg-gray-100 text-gray-700'
+            ? 'bg-black/90 text-white' 
+            : 'hover:bg-white/60 text-gray-700'
         }`}
         onClick={() => handleSelectSession(session.id)}
       >
@@ -202,19 +202,19 @@ export function Sidebar({ sessionId }: SidebarProps) {
   };
 
   return (
-    <div className="w-72 min-w-[250px] border-r border-gray-100 h-full flex flex-col bg-white">
-      <div className="px-4 py-4 flex items-center justify-between border-b border-gray-100">
+    <div className="w-72 min-w-[250px] border-r border-gray-200 h-full flex flex-col bg-white/50 backdrop-blur-md text-gray-800">
+      <div className="px-4 py-4 flex items-center justify-between border-b border-gray-200">
         <div className="flex items-center">
           <div className="flex items-center justify-center h-7 w-7 rounded-full bg-black text-white mr-2">
             <MessageSquare size={14} />
           </div>
-          <h1 className="text-base font-medium text-black">Chats</h1>
+          <h1 className="text-base font-medium text-gray-800">Chats</h1>
         </div>
         <Button 
           onClick={handleCreateSession} 
           variant="outline"
           size="sm"
-          className="h-8 px-2 text-xs rounded-lg border-gray-200 hover:bg-gray-50 hover:border-gray-300 text-black"
+          className="h-8 px-2 text-xs rounded-lg border-gray-200 hover:bg-gray-100 hover:border-gray-300 text-gray-800 bg-white/80"
         >
           <Plus size={14} className="mr-1" />
           New Chat
@@ -235,7 +235,7 @@ export function Sidebar({ sessionId }: SidebarProps) {
 
         {recent.length > 0 && (
           <div className="mb-4">
-            <p className="text-[11px] uppercase tracking-wider text-gray-400 font-medium mb-2 px-2">Last 7 days</p>
+            <p className="text-[11px] uppercase tracking-wider text-gray-400 font-medium mb-2 px-2">LAST 7 DAYS</p>
             <div className="space-y-0.5">
               {filterSessionsWithMessages(recent).map((session: Session) => (
                 <ChatItem key={session.id} session={session} />
