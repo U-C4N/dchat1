@@ -169,10 +169,32 @@ export function Chat({ sessionId }: ChatProps) {
         // Tam JSON yanıtı içerik olarak kullan 
         messageContent = data.content;
         console.log('Using full JSON content for message');
-      } else if (data.weather_data || data.earthquake_data || data.exchange_rate_data || data.coin_data || data.stock_data) {
+      } else if (data.weather_data || data.earthquake_data || data.exchange_rate_data || data.coin_data || data.stock_data || data.deep_research_data) {
         // Uyumluluk için eski format - tüm JSON yanıtı al
-        messageContent = JSON.stringify(data);
-        console.log('Using legacy format JSON for message');
+        
+        if (data.deep_research_data) {
+          const researchData = data.deep_research_data;
+          let formattedContent = `### ${data.text}\n\n`;
+          
+          if (researchData.success) {
+            formattedContent += `**Araştırma Sonuçları:**\n\n${researchData.data.analysis}\n\n`;
+            
+            if (researchData.data.sources && researchData.data.sources.length > 0) {
+              formattedContent += `**Kaynaklar:**\n\n`;
+              researchData.data.sources.forEach((source: any, index: number) => {
+                formattedContent += `${index + 1}. [${source.title}](${source.url})\n`;
+              });
+            }
+          } else {
+            formattedContent += `**Araştırma Hatası:** ${researchData.error || 'Bilinmeyen bir hata oluştu.'}\n`;
+          }
+          
+          messageContent = formattedContent;
+          console.log('Using formatted deep research content');
+        } else {
+          messageContent = JSON.stringify(data);
+          console.log('Using legacy format JSON for message');
+        }
       } else {
         // Sadece metin yanıtı
         messageContent = data.text || '';
