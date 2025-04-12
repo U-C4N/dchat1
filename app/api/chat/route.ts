@@ -125,7 +125,9 @@ Global, dünya, dünya geneli, tüm dünya gibi ifadeler gördüğünde, getEart
 
 Kullanıcı özellikle sorduğunda hava durumu, deprem bilgisi, döviz kuru, kripto para ve hisse senedi bilgilerini sağlayabilirsin.
 
-Kripto paralar için getCoin, hisse senetleri için getStock aracını kullanabilirsin.`
+Kripto paralar için getCoin, hisse senetleri için getStock aracını kullanabilirsin.
+
+Eğer kullanıcı mesajında "Deep research mode is active" ifadesini görürsen, bu bir derin araştırma talebidir. Bu durumda deepResearch aracını kullanarak kapsamlı bir araştırma yapmalısın. Araştırma konusunu kullanıcının mesajından çıkar ve deepResearch aracına "topic" parametresi olarak gönder.`
     });
     
     try {
