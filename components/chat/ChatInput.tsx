@@ -1,8 +1,10 @@
 import { useState, useRef, FormEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Paperclip, ArrowRight, Search } from 'lucide-react';
-import { useChatStore } from '@/lib/store';
 import { cn } from '@/lib/utils';
+import { useDeepResearch } from '@/lib/deep-research-context';
+import { DeepResearch } from '@/components/deep-research';
+import { DeepResearchProgress } from '@/components/deep-research-progress';
 
 type ChatInputProps = {
   sessionId: string;
@@ -10,18 +12,23 @@ type ChatInputProps = {
   isLoading: boolean;
 };
 
-export function ChatInput({ sessionId, onSend, isLoading }: ChatInputProps) {
+export function ChatInput({ onSend, isLoading }: ChatInputProps) {
   const [message, setMessage] = useState('');
   const [searchActive, setSearchActive] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const { state: deepResearchState, setActive } = useDeepResearch();
 
   const handleSend = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     
     if (!message.trim() || isLoading) return;
     
-    // Send the message
-    onSend(message);
+    if (searchActive) {
+      const deepResearchPrompt = `Deep research mode is active. Please perform a comprehensive research on: ${message}`;
+      onSend(deepResearchPrompt);
+    } else {
+      onSend(message);
+    }
     
     // Clear the input
     setMessage('');
@@ -36,14 +43,25 @@ export function ChatInput({ sessionId, onSend, isLoading }: ChatInputProps) {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       if (!isLoading && message.trim()) {
-        onSend(message);
+        if (searchActive) {
+          const deepResearchPrompt = `Deep research mode is active. Please perform a comprehensive research on: ${message}`;
+          onSend(deepResearchPrompt);
+        } else {
+          onSend(message);
+        }
         setMessage('');
       }
     }
   };
   
   const toggleDeepSearch = () => {
-    setSearchActive(!searchActive);
+    const newState = !searchActive;
+    setSearchActive(newState);
+    setActive(newState);
+    
+    if (!newState && deepResearchState.activity.length > 0) {
+      setActive(false);
+    }
     
     // Focus the textarea when toggling deep search
     if (textareaRef.current) {
@@ -53,6 +71,22 @@ export function ChatInput({ sessionId, onSend, isLoading }: ChatInputProps) {
 
   return (
     <div className="p-0">
+      {/* Deep Research UI Components */}
+      {searchActive && deepResearchState.isActive && (
+        <>
+          {/* Deep Research Progress Bar */}
+          <div className="max-w-3xl mx-auto mb-4 px-4">
+            <DeepResearchProgress activity={deepResearchState.activity} />
+          </div>
+          
+          {/* Deep Research Activity and Sources Panel */}
+          <DeepResearch 
+            activity={deepResearchState.activity} 
+            sources={deepResearchState.sources} 
+          />
+        </>
+      )}
+      
       <form onSubmit={handleSend} className="max-w-3xl mx-auto">
         <div className="relative flex items-center backdrop-blur-xl bg-white rounded-md transition-colors">
           <Button 

@@ -1,6 +1,6 @@
 import { generateText, Message, CoreMessage, ToolCallPart, ToolResultPart } from 'ai';
 import { deepseek } from '@ai-sdk/deepseek';
-import { getWeather, getEarthquake, getExchangeRate, getCoin, getStock } from '@/lib/ai/tools';
+import { getWeather, getEarthquake, getExchangeRate, getCoin, getStock, deepResearch } from '@/lib/ai/tools';
 import { supabase } from '@/lib/supabase/client';
 import { z } from 'zod';
 
@@ -125,7 +125,9 @@ Global, dünya, dünya geneli, tüm dünya gibi ifadeler gördüğünde, getEart
 
 Kullanıcı özellikle sorduğunda hava durumu, deprem bilgisi, döviz kuru, kripto para ve hisse senedi bilgilerini sağlayabilirsin.
 
-Kripto paralar için getCoin, hisse senetleri için getStock aracını kullanabilirsin.`
+Kripto paralar için getCoin, hisse senetleri için getStock aracını kullanabilirsin.
+
+Eğer kullanıcı mesajında "Deep research mode is active" ifadesini görürsen, bu bir derin araştırma talebidir. Bu durumda deepResearch aracını kullanarak kapsamlı bir araştırma yapmalısın. Araştırma konusunu kullanıcının mesajından çıkar ve deepResearch aracına "topic" parametresi olarak gönder.`
     });
     
     try {
@@ -149,7 +151,7 @@ Kripto paralar için getCoin, hisse senetleri için getStock aracını kullanabi
         model: deepseekModel,
         messages: formattedMessages as CoreMessage[],
         temperature: 0.7,
-        tools: { getWeather, getEarthquake, getExchangeRate, getCoin, getStock },
+        tools: { getWeather, getEarthquake, getExchangeRate, getCoin, getStock, deepResearch },
       });
       
       // Check if the initial result included tool calls AND results
@@ -275,6 +277,10 @@ Kripto paralar için getCoin, hisse senetleri için getStock aracını kullanabi
             console.log('[CHAT API] Received stock data:', JSON.stringify(toolResult.result).substring(0, 200) + '...');
             response.stock_data = toolResult.result;
             response.text = "İşte hisse senedi bilgisi:";
+          } else if (toolResult.toolName === 'deepResearch') {
+            console.log('[CHAT API] Received deep research data:', JSON.stringify(toolResult.result).substring(0, 200) + '...');
+            response.deep_research_data = toolResult.result;
+            response.text = "İşte derin araştırma sonuçları:";
           }
         }
         
