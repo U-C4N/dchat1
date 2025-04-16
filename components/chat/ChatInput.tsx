@@ -1,10 +1,7 @@
-import { useState, useRef, FormEvent } from 'react';
+import React, { useState, useRef, FormEvent } from 'react';
 import { Button } from '@/components/ui/button';
-import { Paperclip, ArrowRight, Search } from 'lucide-react';
+import { Paperclip, ArrowRight, Search, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useDeepResearch } from '@/lib/deep-research-context';
-import { DeepResearch } from '@/components/deep-research';
-import { DeepResearchProgress } from '@/components/deep-research-progress';
 
 type ChatInputProps = {
   sessionId: string;
@@ -15,20 +12,15 @@ type ChatInputProps = {
 export function ChatInput({ onSend, isLoading }: ChatInputProps) {
   const [message, setMessage] = useState('');
   const [searchActive, setSearchActive] = useState(false);
+  const [agiBetaActive, setAgiBetaActive] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const { state: deepResearchState, setActive } = useDeepResearch();
 
   const handleSend = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     
     if (!message.trim() || isLoading) return;
     
-    if (searchActive) {
-      const deepResearchPrompt = `Deep research mode is active. Please perform a comprehensive research on: ${message}`;
-      onSend(deepResearchPrompt);
-    } else {
-      onSend(message);
-    }
+    onSend(message);
     
     // Clear the input
     setMessage('');
@@ -43,27 +35,25 @@ export function ChatInput({ onSend, isLoading }: ChatInputProps) {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       if (!isLoading && message.trim()) {
-        if (searchActive) {
-          const deepResearchPrompt = `Deep research mode is active. Please perform a comprehensive research on: ${message}`;
-          onSend(deepResearchPrompt);
-        } else {
-          onSend(message);
-        }
+        onSend(message);
         setMessage('');
       }
     }
   };
   
   const toggleDeepSearch = () => {
-    const newState = !searchActive;
-    setSearchActive(newState);
-    setActive(newState);
+    setSearchActive(!searchActive);
     
-    if (!newState && deepResearchState.activity.length > 0) {
-      setActive(false);
+    // Focus the textarea after toggling
+    if (textareaRef.current) {
+      textareaRef.current.focus();
     }
+  };
+  
+  const toggleAgiBeta = () => {
+    setAgiBetaActive(!agiBetaActive);
     
-    // Focus the textarea when toggling deep search
+    // Focus the textarea after toggling
     if (textareaRef.current) {
       textareaRef.current.focus();
     }
@@ -71,22 +61,6 @@ export function ChatInput({ onSend, isLoading }: ChatInputProps) {
 
   return (
     <div className="p-0">
-      {/* Deep Research UI Components */}
-      {searchActive && deepResearchState.isActive && (
-        <>
-          {/* Deep Research Progress Bar */}
-          <div className="max-w-3xl mx-auto mb-4 px-4">
-            <DeepResearchProgress activity={deepResearchState.activity} />
-          </div>
-          
-          {/* Deep Research Activity and Sources Panel */}
-          <DeepResearch 
-            activity={deepResearchState.activity} 
-            sources={deepResearchState.sources} 
-          />
-        </>
-      )}
-      
       <form onSubmit={handleSend} className="max-w-3xl mx-auto">
         <div className="relative flex items-center backdrop-blur-xl bg-white rounded-md transition-colors">
           <Button 
@@ -101,16 +75,24 @@ export function ChatInput({ onSend, isLoading }: ChatInputProps) {
           <div className="relative w-full">
             <textarea
               ref={textareaRef}
-              placeholder={searchActive ? "Derin araştırma yapın..." : "Mesaj gönder..."}
+              placeholder={
+                agiBetaActive 
+                  ? "AGI Beta ile konuşun..." 
+                  : searchActive 
+                    ? "Derin araştırma yapın..." 
+                    : "Mesaj gönder..."
+              }
               value={message}
-              onChange={(e) => setMessage(e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setMessage(e.target.value)}
               onKeyDown={handleKeyDown}
               className={cn(
                 "flex min-h-[105px] max-h-[105px] w-full rounded-md border-2 bg-transparent px-4 py-3 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:border-2 focus-visible:transition-colors focus-visible:duration-300 disabled:cursor-not-allowed disabled:opacity-50",
                 "pl-12 pr-12 pb-14 overflow-hidden resize-none",
-                searchActive 
-                  ? "border-amber-300 focus-visible:border-amber-500 bg-amber-50/30" 
-                  : "border-blue-200 focus-visible:border-black"
+                agiBetaActive
+                  ? "border-blue-400 focus-visible:border-blue-600 bg-blue-50/30"
+                  : searchActive 
+                    ? "border-amber-300 focus-visible:border-amber-500 bg-amber-50/30" 
+                    : "border-blue-200 focus-visible:border-black"
               )}
               disabled={isLoading}
             />
@@ -137,6 +119,28 @@ export function ChatInput({ onSend, isLoading }: ChatInputProps) {
                   Derin araştırma
                 </span>
               </Button>
+              
+              {/* AGI Beta Button */}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className={cn(
+                  "rounded-full border flex items-center gap-1 px-4 py-1.5 transition-all shadow-sm",
+                  agiBetaActive 
+                    ? "bg-blue-100 hover:bg-blue-200 border-blue-400 text-blue-700 ring-2 ring-blue-400 ring-opacity-50" 
+                    : "bg-white hover:bg-gray-100 border-gray-200 text-gray-700 hover:border-gray-300"
+                )}
+                onClick={toggleAgiBeta}
+              >
+                <Sparkles size={16} className={agiBetaActive ? "text-blue-500 mr-1" : "text-gray-500 mr-1"} />
+                <span className={cn(
+                  "font-medium",
+                  agiBetaActive ? "text-blue-700" : "text-gray-700"
+                )}>
+                  AGI Beta
+                </span>
+              </Button>
             </div>
           </div>
           
@@ -146,9 +150,11 @@ export function ChatInput({ onSend, isLoading }: ChatInputProps) {
             disabled={isLoading || !message.trim()}
             className={cn(
               "absolute right-3 h-10 w-10 rounded-full z-10 flex items-center justify-center transition-colors",
-              searchActive 
-                ? "bg-amber-500 hover:bg-amber-600"
-                : "bg-black hover:bg-gray-800"
+              agiBetaActive
+                ? "bg-blue-600 hover:bg-blue-700"
+                : searchActive 
+                  ? "bg-amber-500 hover:bg-amber-600"
+                  : "bg-black hover:bg-gray-800"
             )}
           >
             <ArrowRight size={18} className="text-white" />

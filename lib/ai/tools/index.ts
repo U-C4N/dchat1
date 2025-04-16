@@ -3,4 +3,3 @@ export { getEarthquake } from './get-earthquake';
 export { getExchangeRate } from './get-exchange-rate'; 
 export { getCoin } from './get-coin';
 export { getStock } from './get-stock'; 
-export { deepResearch } from './deep-research'; 
