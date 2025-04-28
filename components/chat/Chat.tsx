@@ -258,7 +258,7 @@ export function Chat({ sessionId }: ChatProps) {
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col h-full w-full overflow-hidden">
         {/* Chat Header */}
-        <div className="flex items-center px-5 py-4 bg-foreground/5 sticky top-0 z-20 border-b border-gray-100">
+        <div className="flex items-center px-5 py-4 bg-foreground/5 sticky top-0 z-20">
           <Button
             variant="ghost"
             size="icon"
@@ -269,10 +269,11 @@ export function Chat({ sessionId }: ChatProps) {
             {sidebarOpen ? <PanelLeftClose size={18} /> : <PanelLeft size={18} />}
           </Button>
           <div className="flex items-center">
-            <div className="flex items-center justify-center h-8 w-8 rounded-full bg-black text-white mr-2">
-              <MessageSquare size={14} />
-            </div>
-            <h1 className="text-lg font-medium text-black">Deuz AI</h1>
+            <select className="rounded-md border bg-white hover:bg-gray-100 border-gray-200 text-gray-700 hover:border-gray-300 flex items-center px-4 py-1.5 transition-all shadow-sm text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-opacity-50">
+              <option value="gemini">Gemini 2.5 PRO</option>
+              <option value="deepseek">Deepseek R1</option>
+              <option value="starter">Starter (5 PDF + 10 YouTube + 5 Arvix)</option>
+            </select>
           </div>
         </div>
         
