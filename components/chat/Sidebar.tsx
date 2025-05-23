@@ -72,10 +72,10 @@ export function Sidebar({ sessionId }: SidebarProps) {
     e.stopPropagation();
     await deleteSession(selectedSessionId);
     
-    // If we're deleting the current session, create a new one instead of just going to homepage
+    // If we're deleting the current session, navigate to home. 
+    // Chat.tsx will handle creating a new session if no sessionId is found.
     if (selectedSessionId === sessionId) {
-      const newSessionId = await createSession();
-      router.push(`/${newSessionId}`);
+      router.push('/'); // Ana sayfaya yönlendir. Chat.tsx yeni chat'i halledecek.
     }
   };
 

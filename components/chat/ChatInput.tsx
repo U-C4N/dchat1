@@ -77,10 +77,10 @@ export function ChatInput({ onSend, isLoading }: ChatInputProps) {
               ref={textareaRef}
               placeholder={
                 agiBetaActive 
-                  ? "AGI Beta ile konuşun..." 
+                  ? "Chat with AGI Beta..." 
                   : searchActive 
-                    ? "Derin araştırma yapın..." 
-                    : "Mesaj gönder..."
+                    ? "Search with deep research..." 
+                    : "Type a message..."
               }
               value={message}
               onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setMessage(e.target.value)}
@@ -116,7 +116,7 @@ export function ChatInput({ onSend, isLoading }: ChatInputProps) {
                   "font-medium",
                   searchActive ? "text-amber-800" : "text-gray-700"
                 )}>
-                  Derin araştırma
+                  Deep Search
                 </span>
               </Button>
               

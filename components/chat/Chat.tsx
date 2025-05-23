@@ -272,46 +272,12 @@ export function Chat({ sessionId }: ChatProps) {
             <select className="rounded-md border bg-white hover:bg-gray-100 border-gray-200 text-gray-700 hover:border-gray-300 flex items-center px-4 py-1.5 transition-all shadow-sm text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-opacity-50">
               <option value="gemini">Gemini 2.5 PRO</option>
               <option value="deepseek">Deepseek R1</option>
-              <option value="starter">Starter (5 PDF + 10 YouTube + 5 Arvix)</option>
             </select>
           </div>
         </div>
         
         {/* Messages Area */}
         <div className="flex-1 overflow-y-auto px-4 py-6 md:px-8 space-y-6 bg-foreground/5">
-          {showExamples && messages[sessionId]?.length === 0 && (
-            <div className="flex flex-col items-center justify-center h-full max-w-3xl mx-auto -mt-20">
-              <div className="mb-8 flex items-center">
-                <div className="flex items-center justify-center h-12 w-12 rounded-full bg-black text-white">
-                  <MessageSquare size={22} />
-                </div>
-              </div>
-              
-              <div className="w-full mb-10 px-4">
-                <h2 className="text-center text-2xl font-medium text-black mb-3">
-                  Welcome to Deuz AI
-                </h2>
-                <p className="text-center mb-6 text-gray-600 text-base leading-relaxed">
-                  A multi-agent system with <span className="font-medium text-black">weather</span>, 
-                  <span className="font-medium text-black"> earthquake</span>, and 
-                  <span className="font-medium text-black"> currency</span> data capabilities
-                </p>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full px-4">
-                {EXAMPLE_QUERIES.map((example, index) => (
-                  <button
-                    key={index}
-                    className="text-left p-5 bg-foreground/5 border border-gray-200 rounded-xl hover:border-black hover:shadow-sm transition-all duration-200"
-                    onClick={() => handleExampleClick(example)}
-                  >
-                    <p className="font-medium text-black mb-1">{example.title}</p>
-                    <p className="text-gray-500 text-sm">{example.subtitle}</p>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
           
           {messages[sessionId]?.map((message: Message, index: number) => (
             <ChatMessage 
@@ -323,8 +289,33 @@ export function Chat({ sessionId }: ChatProps) {
           <div ref={messagesEndRef} />
         </div>
         
+        {/* EXAMPLE QUERIES MOVED HERE */}
+        {showExamples && messages[sessionId]?.length === 0 && (
+            <div className="px-4 py-2 md:px-8 bg-foreground/5">
+              <div className="flex flex-col items-center justify-center max-w-3xl mx-auto">
+                <p className="text-center mb-4 text-gray-600 text-base leading-relaxed">
+                  A multi-agent system with <span className="font-medium text-black">weather</span>, 
+                  <span className="font-medium text-black"> earthquake</span>, and 
+                  <span className="font-medium text-black"> currency</span> data capabilities
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full">
+                  {EXAMPLE_QUERIES.map((example, index) => (
+                    <button
+                      key={index}
+                      className="text-left p-3 bg-background border border-gray-200 rounded-lg hover:border-black hover:shadow-sm transition-all duration-200"
+                      onClick={() => handleExampleClick(example)}
+                    >
+                      <p className="font-medium text-black text-sm mb-1">{example.title}</p>
+                      <p className="text-gray-500 text-xs">{example.subtitle}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
         {/* Input Area */}
-        <div className="bg-foreground/5 sticky bottom-0 z-10 w-full p-4 md:p-5 border-l border-r border-gray-100">
+        <div className="bg-foreground/5 sticky bottom-0 z-10 w-full p-4 md:p-5 border-t border-gray-100">
           <ChatInput 
             sessionId={sessionId} 
             onSend={handleSendMessage} 
