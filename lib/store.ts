@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
 import { Session, Message, supabase } from './supabase/client';
+import { deleteSessionAttachments } from './supabase/storage';
 
 interface ChatState {
   sessions: Session[];
@@ -20,7 +21,8 @@ interface ChatState {
     sessionId: string, 
     content: string, 
     role: 'user' | 'assistant', 
-    messageId?: string
+    messageId?: string,
+    attachments?: string[]
   ) => Promise<void>;
   updateMessageContent: (sessionId: string, messageId: string, content: string) => Promise<void>;
   updateMessageResponseTime: (sessionId: string, messageId: string, responseTime: number) => Promise<void>;
@@ -62,6 +64,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
   
   deleteSession: async (id) => {
+    // First, delete all attachments associated with this session
+    try {
+      const success = await deleteSessionAttachments(id);
+      if (!success) {
+        console.warn('Failed to delete some attachments for session:', id);
+      }
+    } catch (error) {
+      console.error('Error deleting session attachments:', error);
+    }
+
+    // Delete the session from database
     const { error } = await supabase
       .from('sessions')
       .delete()
@@ -110,17 +123,26 @@ export const useChatStore = create<ChatState>((set, get) => ({
   
   setCurrentSessionId: (id) => set({ currentSessionId: id }),
   
-  addMessage: async (sessionId, content, role, messageId) => {
+  addMessage: async (sessionId, content, role, messageId, attachments) => {
     const newMessage = {
       id: messageId || uuidv4(),
       session_id: sessionId,
       role,
       content,
       created_at: new Date().toISOString(),
-      response_time: undefined
+      response_time: undefined,
+      attachments: attachments || []
     };
     
-    console.log(`Adding message to session ${sessionId}, id: ${newMessage.id}, role: ${role}`, newMessage);
+    // Database message without attachments (since column doesn't exist yet)
+    const dbMessage = {
+      id: newMessage.id,
+      session_id: sessionId,
+      role,
+      content,
+      created_at: new Date().toISOString(),
+      response_time: undefined
+    };
     
     try {
       // Check if session exists before adding the message
@@ -142,7 +164,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       
       const { error, data } = await supabase
         .from('messages')
-        .insert(newMessage)
+        .insert(dbMessage) // Use dbMessage without attachments
         .select();
         
       if (error) {
@@ -154,12 +176,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
       
       set((state) => {
         const sessionMessages = state.messages[sessionId] || [];
-        return {
+        const updatedMessages = [...sessionMessages, newMessage];
+        
+        const result = {
           messages: {
             ...state.messages,
-            [sessionId]: [...sessionMessages, newMessage],
+            [sessionId]: updatedMessages, // Use newMessage with attachments for UI
           },
         };
+        
+        return result;
       });
     } catch (error) {
       console.error('Exception adding message:', error, JSON.stringify(error));
@@ -220,7 +246,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
   
   getMessages: async (sessionId) => {
-    console.log(`Fetching messages for session: ${sessionId}`);
+    // Get current state before database fetch
+    const currentState = get();
+    const currentMessages = currentState.messages[sessionId] || [];
     
     const { data, error } = await supabase
       .from('messages')
@@ -233,10 +261,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
       throw error;
     }
     
+    // Merge database messages with current state attachments
+    const messagesWithAttachments = (data || []).map(dbMsg => {
+      // Find existing message in current state
+      const existingMsg = currentMessages.find(msg => msg.id === dbMsg.id);
+      
+      const mergedMessage = {
+        ...dbMsg,
+        attachments: existingMsg?.attachments || [] // Keep existing attachments or empty array
+      };
+      
+      return mergedMessage;
+    });
+    
     set((state) => ({
       messages: {
         ...state.messages,
-        [sessionId]: data || [],
+        [sessionId]: messagesWithAttachments,
       },
     }));
   },

@@ -8,6 +8,7 @@ import { Message, supabase } from '@/lib/supabase/client';
 import { PanelLeftClose, PanelLeft, MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { v4 as uuidv4 } from 'uuid';
 
 type ChatProps = {
   sessionId: string | null;
@@ -55,6 +56,7 @@ export function Chat({ sessionId }: ChatProps) {
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [showExamples, setShowExamples] = useState(true);
+  const fetchedSessions = useRef<Set<string>>(new Set()); // Track fetched sessions
 
   useEffect(() => {
     const initializeChat = async () => {
@@ -65,9 +67,14 @@ export function Chat({ sessionId }: ChatProps) {
         return;
       }
       
-      // Set current session ID and fetch messages
+      // Set current session ID and fetch messages only once per session
       setCurrentSessionId(sessionId);
-      await getMessages(sessionId);
+      
+      // Only fetch messages if we haven't fetched them before
+      if (!fetchedSessions.current.has(sessionId)) {
+        await getMessages(sessionId);
+        fetchedSessions.current.add(sessionId);
+      }
     };
     
     initializeChat();
@@ -87,14 +94,60 @@ export function Chat({ sessionId }: ChatProps) {
     }
   }, [messages, sessionId]);
 
-  const handleSendMessage = async (content: string) => {
+  const handleSendMessage = async (content: string, attachments?: File[]) => {
     if (!sessionId) return;
     
     // Check if this is the first message in the chat
     const isFirstMessage = !messages[sessionId] || messages[sessionId].length === 0;
     
-    // Add user message to UI
-    await addMessage(sessionId, content, 'user');
+    // Upload attachments first if any
+    let attachmentUrls: string[] = [];
+    if (attachments && attachments.length > 0) {
+      setIsLoading(true);
+      try {
+        const { uploadImage } = await import('@/lib/supabase/storage');
+        for (const file of attachments) {
+          const result = await uploadImage(file, sessionId);
+          if (result.success && result.url) {
+            // URL'in geçerli olup olmadığını kontrol et
+            try {
+              const testResponse = await fetch(result.url, { method: 'HEAD' });
+              if (testResponse.ok) {
+                attachmentUrls.push(result.url);
+              } else {
+                console.error('[CHAT] URL is not accessible:', result.url);
+              }
+            } catch (urlError) {
+              console.error('[CHAT] URL test failed:', result.url, urlError);
+              // URL test başarısız olsa bile eklemeyi dene
+              attachmentUrls.push(result.url);
+            }
+          } else {
+            console.error('[CHAT] Upload failed for file:', file.name, result.error);
+          }
+        }
+      } catch (error) {
+        console.error('Error uploading attachments:', error);
+      }
+      setIsLoading(false);
+    }
+    
+    // Add user message to UI with attachments
+    const userMessageId = uuidv4();
+    await addMessage(sessionId, content, 'user', userMessageId, attachmentUrls);
+    
+    // Force re-render by updating message list
+    if (attachmentUrls.length > 0) {
+      // Trigger a re-render to ensure attachments are visible
+      setTimeout(() => {
+        const currentMessages = messages[sessionId] || [];
+        const targetMessage = currentMessages.find(m => m.id === userMessageId);
+      }, 100);
+    }
+    
+    // Verify the message was added with attachments
+    const currentMessages = messages[sessionId] || [];
+    const lastMessage = currentMessages[currentMessages.length - 1];
     
     // If this is the first message, update the chat title
     if (isFirstMessage) {
@@ -119,15 +172,19 @@ export function Chat({ sessionId }: ChatProps) {
     let responseTime = 0;
     
     try {
-      // Generate a temporary ID for the assistant's response
-      const tempMessageId = crypto.randomUUID();
+      // Create assistant message placeholder
+      const assistantMessageId = uuidv4();
+      await addMessage(sessionId, '', 'assistant', assistantMessageId);
       
-      // Add placeholder message for assistant's response
-      await addMessage(sessionId, '', 'assistant', tempMessageId);
+      let response;
       
-      // Prepare the API request body
-      const requestBody = JSON.stringify({
-        messages: [
+      // Prepare request based on whether we have attachments
+      if (attachments && attachments.length > 0) {
+        // Use FormData for requests with attachments
+        const formData = new FormData();
+        
+        // Add current messages including the new user message
+        const currentMessages = [
           ...(messages[sessionId] || []).map((msg: Message) => ({
             role: msg.role,
             content: msg.content
@@ -136,78 +193,102 @@ export function Chat({ sessionId }: ChatProps) {
             role: 'user', 
             content
           }
-        ],
-        sessionId
-      });
-      
-      // Make the API request
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: requestBody,
-      });
+        ];
+        
+        formData.append('messages', JSON.stringify(currentMessages));
+        formData.append('sessionId', sessionId);
+        
+        // Add attachment URLs for AI processing
+        if (attachmentUrls.length > 0) {
+          formData.append('attachmentUrls', JSON.stringify(attachmentUrls));
+        }
+        
+        // Don't send actual files, only URLs (files already uploaded)
+        
+        response = await fetch('/api/chat', {
+          method: 'POST',
+          body: formData,
+        });
+      } else {
+        // Use JSON for text-only requests
+        const requestBody = {
+          messages: [
+            ...(messages[sessionId] || []).map((msg: Message) => ({
+              role: msg.role,
+              content: msg.content
+            })),
+            { 
+              role: 'user', 
+              content
+            }
+          ],
+          sessionId
+        };
+        
+        response = await fetch('/api/chat', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(requestBody),
+        });
+      }
       
       if (!response.ok) {
-        throw new Error(`API responded with status ${response.status}`);
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
       
-      // Process the response as regular JSON (not streaming)
-      const data = await response.json();
-      
-      // Calculate response time
-      const endTime = performance.now();
-      responseTime = (endTime - startTime) / 1000; // ms to seconds
-      
-      console.log(`Response time: ${responseTime.toFixed(2)}s`);
-      console.log('Response data:', data);
-      
-      // Yeni API yanıt formatını kontrol et (content içeren veya içermeyen)
-      let messageContent = '';
-      if (data.content) {
-        // Tam JSON yanıtı içerik olarak kullan 
-        messageContent = data.content;
-        console.log('Using full JSON content for message');
-      } else if (data.weather_data || data.earthquake_data || data.exchange_rate_data || data.coin_data || data.stock_data) {
-        // Uyumluluk için eski format - tüm JSON yanıtı al
-        messageContent = JSON.stringify(data);
-        console.log('Using legacy format JSON for message');
-      } else {
-        // Sadece metin yanıtı
-        messageContent = data.text || '';
-        console.log('Using text-only response');
+      if (!response.body) {
+        throw new Error('No response body received');
       }
       
-      // Update message with the response text
-      await updateMessageContent(sessionId, tempMessageId, messageContent);
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let fullText = '';
       
-      // Update message with response time
-      await updateMessageResponseTime(sessionId, tempMessageId, responseTime);
-      
-      // Update Supabase
       try {
-        const { error } = await supabase
-          .from('messages')
-          .update({ 
-            content: messageContent,
-            response_time: responseTime 
-          })
-          .match({ id: tempMessageId, session_id: sessionId });
-        
-        if (error) {
-          console.error('Supabase response update error:', error);
-        } else {
-          console.log('Response saved to database successfully');
+        while (true) {
+          const { done, value } = await reader.read();
+          
+          if (done) {
+            break;
+          }
+          
+          const chunk = decoder.decode(value, { stream: true });
+          fullText += chunk;
+          
+          // Update message with accumulated text
+          await updateMessageContent(sessionId, assistantMessageId, fullText);
         }
-      } catch (e) {
-        console.error('Failed to update response in database:', e);
+        
+        // Calculate and update response time
+        responseTime = (performance.now() - startTime) / 1000;
+        
+        // Update response time in database
+        try {
+          const { error: timeUpdateError } = await supabase
+            .from('messages')
+            .update({ response_time: responseTime })
+            .match({ id: assistantMessageId, session_id: sessionId });
+          
+          if (timeUpdateError) {
+            console.error('Error updating response time:', timeUpdateError);
+          } else {
+            console.log(`Response time ${responseTime.toFixed(2)}s saved to database for message ${assistantMessageId}`);
+            // Also update in UI
+            await updateMessageResponseTime(sessionId, assistantMessageId, responseTime);
+          }
+        } catch (timeError) {
+          console.error('Error updating response time:', timeError);
+        }
+        
+      } catch (streamError) {
+        console.error('Error reading stream:', streamError);
+        throw streamError;
+      } finally {
+        reader.releaseLock();
       }
       
-      // Scroll to the latest message
-      if (messagesEndRef.current) {
-        messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
-      }
     } catch (error) {
       console.error('Error in handleSendMessage:', error);
       

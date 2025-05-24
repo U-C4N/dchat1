@@ -68,4 +68,5 @@ export type Message = {
   response_time?: number;
   file_id?: string;
   file_name?: string;
+  attachments?: string[]; // Image URLs array
 }

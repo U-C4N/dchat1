@@ -10,7 +10,7 @@ import { ExchangeRateComponent } from '@/components/ExchangeRateComponent';
 import { CoinComponent } from '@/components/CoinComponent';
 import { StockComponent } from '@/components/StockComponent';
 import { useState, useEffect } from 'react';
-import { File, ExternalLink, Copy, Check } from 'lucide-react';
+import { File, ExternalLink, Copy, Check, Image as ImageIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/lib/supabase/client';
 
@@ -21,6 +21,13 @@ export type ChatMessageProps = {
 
 export function ChatMessage({ message, isLoading = false }: ChatMessageProps) {
   const isUser = message.role === 'user';
+  
+  // DEBUG: Message'ı konsola yazdır
+  if (isUser) {
+    console.log('USER MESSAGE:', message);
+    console.log('USER MESSAGE ATTACHMENTS:', message.attachments);
+  }
+  
   const [weatherData, setWeatherData] = useState<any>(null);
   const [earthquakeData, setEarthquakeData] = useState<any>(null);
   const [exchangeRateData, setExchangeRateData] = useState<any>(null);
@@ -28,6 +35,7 @@ export function ChatMessage({ message, isLoading = false }: ChatMessageProps) {
   const [stockData, setStockData] = useState<any>(null);
   const [messageText, setMessageText] = useState<string>(message.content || '');
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [attachmentImages, setAttachmentImages] = useState<string[]>([]);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
   useEffect(() => {
@@ -48,8 +56,20 @@ export function ChatMessage({ message, isLoading = false }: ChatMessageProps) {
       }
     };
 
+    // Set attachment images from message data
+    if (isUser && message.attachments && message.attachments.length > 0) {
+      console.log('Setting images:', message.attachments);
+      setAttachmentImages(message.attachments);
+    } else if (isUser && message.content === 'bak') {
+      // TEST: Fake attachment ekle
+      console.log('Adding fake attachment for test');
+      setAttachmentImages(['https://picsum.photos/200']);
+    } else {
+      setAttachmentImages([]);
+    }
+
     fetchPdfUrl();
-  }, [message.file_id]);
+  }, [message.file_id, message.attachments, isUser, message.id]);
 
   useEffect(() => {
     // Reset copy status after 2 seconds
@@ -196,6 +216,35 @@ export function ChatMessage({ message, isLoading = false }: ChatMessageProps) {
                   Open
                 </Button>
               )}
+            </div>
+          )}
+
+          {/* Display image attachments for user messages */}
+          {isUser && attachmentImages.length > 0 && (
+            <div className="mb-3">
+              <p className="text-red-500 text-xs mb-2">GÖRÜLÜYOR: {attachmentImages.length} resim</p>
+              <div className="grid grid-cols-2 gap-2 max-w-md">
+                {attachmentImages.map((imageUrl, index) => (
+                  <div key={index} className="relative group">
+                    <img
+                      src={imageUrl}
+                      alt={`Attachment ${index + 1}`}
+                      className="w-full h-32 object-cover rounded-lg border border-gray-200 hover:shadow-md transition-shadow cursor-pointer"
+                      onClick={() => window.open(imageUrl, '_blank')}
+                      onLoad={() => console.log('Image loaded successfully:', imageUrl)}
+                      onError={(e) => {
+                        console.error('Image failed to load:', imageUrl);
+                        e.currentTarget.style.backgroundColor = 'red';
+                        e.currentTarget.style.color = 'white';
+                        e.currentTarget.innerHTML = 'FAILED';
+                      }}
+                    />
+                    <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 transition-all rounded-lg flex items-center justify-center">
+                      <ExternalLink size={16} className="text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
           

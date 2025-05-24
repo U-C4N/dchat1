@@ -1,7 +1,9 @@
-import { generateText, Message, CoreMessage, ToolCallPart, ToolResultPart } from 'ai';
+import { generateText, Message, CoreMessage, ToolCallPart, ToolResultPart, streamText } from 'ai';
 import { deepseek } from '@ai-sdk/deepseek';
+import { openai } from '@ai-sdk/openai';
 import { getWeather, getEarthquake, getExchangeRate, getCoin, getStock } from '@/lib/ai/tools';
 import { supabase } from '@/lib/supabase/client';
+import { uploadImage } from '@/lib/supabase/storage';
 import { z } from 'zod';
 
 // OpenWeather API anahtarı
@@ -80,19 +82,162 @@ async function fetchWeatherByCity(cityName: string) {
   }
 }
 
-export async function POST(req: Request) {
-  const { messages, sessionId } = await req.json();
+// Process attachment files and upload them
+async function processAttachments(files: File[], sessionId: string) {
+  const attachmentUrls: string[] = [];
+  
+  for (const file of files) {
+    try {
+      const result = await uploadImage(file, sessionId);
+      if (result.success && result.url) {
+        attachmentUrls.push(result.url);
+        console.log(`[API] Successfully uploaded attachment: ${file.name}`);
+      } else {
+        console.error(`[API] Failed to upload attachment: ${file.name}`, result.error);
+      }
+    } catch (error) {
+      console.error(`[API] Error uploading attachment: ${file.name}`, error);
+    }
+  }
+  
+  return attachmentUrls;
+}
+
+// Supabase'e sohbeti kaydetmek için fonksiyon
+async function saveChatToSupabase(sessionId: string, messages: CoreMessage[]) {
+  console.log(`[SAVE CHAT] Attempting to save chat for session ID: ${sessionId}`);
+  if (!sessionId) {
+    console.error('[SAVE CHAT] Session ID is undefined, skipping save.');
+    return;
+  }
+
+  // Kullanıcı ve asistan mesajlarını filtrele
+  const chatMessagesToSave = messages.filter(
+    msg => msg.role === 'user' || msg.role === 'assistant'
+  );
+
+  if (chatMessagesToSave.length === 0) {
+    console.log('[SAVE CHAT] No user or assistant messages to save.');
+    return;
+  }
+
+  console.log(`[SAVE CHAT] Saving ${chatMessagesToSave.length} messages for session ${sessionId}.`);
+  // Log the actual messages being sent to Supabase for inspection
+  console.log('[SAVE CHAT] Messages to save:', JSON.stringify(chatMessagesToSave, null, 2));
 
   try {
-    // Log the initial request messages
-    console.log('[CHAT API] Processing chat request with', messages.length, 'messages');
+    const payload = {
+      id: sessionId,
+      messages: chatMessagesToSave,
+      updated_at: new Date().toISOString(),
+    };
+    console.log('[SAVE CHAT] Upsert payload:', JSON.stringify(payload, null, 2));
+
+    const { data, error } = await supabase
+      .from('chats')
+      .upsert(payload, { onConflict: 'id' })
+      .select();
+
+    if (error) {
+      console.error('[SAVE CHAT] Error saving chat to Supabase. Raw error object:', error);
+      console.error('[SAVE CHAT] Supabase error message:', error.message);
+      console.error('[SAVE CHAT] Supabase error details:', error.details);
+      console.error('[SAVE CHAT] Supabase error hint:', error.hint);
+      console.error('[SAVE CHAT] Supabase error code:', error.code);
+      throw error; // Re-throw the original error object for further inspection if needed
+    }
+    console.log('[SAVE CHAT] Chat saved successfully to Supabase. Response data:', data);
+  } catch (err: any) {
+    console.error('[SAVE CHAT] Exception during saveChatToSupabase. Full exception:', err);
+    if (err.message) {
+        console.error('[SAVE CHAT] Exception message:', err.message);
+    }
+    // Hatanın tekrar fırlatılması, onFinish'in genel hata yönetimini etkileyebilir.
+    // Şimdilik sadece logluyoruz, ancak yukarıda `throw error` ile fırlatıyoruz.
+  }
+}
+
+export async function POST(req: Request) {
+  try {
+    const contentType = req.headers.get('content-type') || '';
+    let messages, sessionId, files: File[] = [];
+    let attachmentUrls: string[] = [];
+
+    // Check if request contains multipart data (with files) or JSON
+    if (contentType.includes('multipart/form-data')) {
+      // Handle FormData (with attachments)
+      const formData = await req.formData();
+      const messagesData = formData.get('messages');
+      sessionId = formData.get('sessionId');
+      const attachmentUrlsData = formData.get('attachmentUrls');
+      
+      if (!messagesData || !sessionId) {
+        return new Response(
+          JSON.stringify({ error: 'Missing required fields' }),
+          {
+            status: 400,
+            headers: { 'Content-Type': 'application/json' }
+          }
+        );
+      }
+
+      messages = JSON.parse(messagesData as string);
+      
+      // Parse attachment URLs if available
+      let existingAttachmentUrls: string[] = [];
+      if (attachmentUrlsData) {
+        existingAttachmentUrls = JSON.parse(attachmentUrlsData as string);
+      }
+      
+      // Get uploaded files if any
+      let fileIndex = 0;
+      while (formData.has(`file${fileIndex}`)) {
+        const file = formData.get(`file${fileIndex}`) as File;
+        if (file) {
+          // Don't store files, just log for debugging
+          console.log(`[CHAT API] Received file: ${file.name} (will use pre-uploaded URL)`);
+        }
+        fileIndex++;
+      }
+      
+      // If we have existing attachment URLs, use them instead of processing files again
+      if (existingAttachmentUrls.length > 0) {
+        attachmentUrls = existingAttachmentUrls;
+        console.log(`[CHAT API] Using ${attachmentUrls.length} existing attachment URLs`);
+      }
+    } else {
+      // Handle JSON (no attachments)
+      const body = await req.json();
+      messages = body.messages;
+      sessionId = body.sessionId;
+      
+      if (!messages || !sessionId) {
+        return new Response(
+          JSON.stringify({ error: 'Missing required fields' }),
+          {
+            status: 400,
+            headers: { 'Content-Type': 'application/json' }
+          }
+        );
+      }
+    }
+
+    console.log(`[CHAT API] Processing chat request with ${messages.length} messages and ${files.length} attachments`);
     console.log('[CHAT API] Request for session:', sessionId);
     console.log('[CHAT API] Last message content:', messages[messages.length - 1]?.content);
     
-    // Check if DEEPSEEK_API_KEY exists
-    const apiKey = process.env.DEEPSEEK_API_KEY;
-    if (!apiKey) {
-      console.error('[CHAT API] Missing DEEPSEEK_API_KEY in environment variables');
+    // Skip file upload in API route - already done in frontend
+    // Use existing attachment URLs that were uploaded in frontend
+    if (attachmentUrls.length > 0) {
+      console.log(`[CHAT API] Using ${attachmentUrls.length} pre-uploaded attachment URLs`);
+    }
+    
+    // Check API keys
+    const openaiApiKey = process.env.OPENAI_API_KEY;
+    const deepseekApiKey = process.env.DEEPSEEK_API_KEY;
+    
+    if (!openaiApiKey && !deepseekApiKey) {
+      console.error('[CHAT API] Missing both OPENAI_API_KEY and DEEPSEEK_API_KEY in environment variables');
       return new Response(
         JSON.stringify({ error: 'Missing API configuration' }),
         {
@@ -101,18 +246,46 @@ export async function POST(req: Request) {
         }
       );
     }
-    console.log('[CHAT API] DeepSeek API key found:', apiKey ? `${apiKey.substring(0, 5)}...` : 'Not found');
+
+    // Use OpenAI only if images are present AND OpenAI key exists, otherwise use DeepSeek
+    const shouldUseOpenAI = attachmentUrls.length > 0 && openaiApiKey;
+    const model = shouldUseOpenAI ? openai('gpt-4o') : deepseek('deepseek-chat');
+    
+    console.log(`[CHAT API] Using ${shouldUseOpenAI ? 'OpenAI GPT-4o' : 'DeepSeek'} model`);
     
     // Formatlı mesajları oluştur
-    const formattedMessages = messages.map((message: any) => ({
-      role: message.role,
-      content: message.content,
-    }));
+    let formattedMessages = messages.map((message: any) => {
+      if (message.role === 'user' && attachmentUrls.length > 0 && message === messages[messages.length - 1] && shouldUseOpenAI) {
+        // Add images to the last user message (only for OpenAI)
+        const content: any[] = [
+          { type: 'text', text: message.content }
+        ];
+        
+        for (const url of attachmentUrls) {
+          content.push({
+            type: 'image_url',
+            image_url: { url: url }
+          });
+        }
+        
+        return {
+          role: message.role,
+          content
+        };
+      }
+      
+      return {
+        role: message.role,
+        content: message.content,
+      };
+    });
     
     // System mesajı ekle
     formattedMessages.unshift({
       role: "system",
       content: `Sen bir yapay zeka asistanısın. Kullanıcının sorularına kısa ve net cevaplar ver. 
+
+${attachmentUrls.length > 0 && shouldUseOpenAI ? 'Kullanıcı resim gönderdiğinde, resimleri analiz et ve detaylı açıklamalar yap. Resimdeki nesneleri, renkleri, komposizyonu ve dikkat çeken detayları açıkla.' : attachmentUrls.length > 0 ? 'Kullanıcı resim gönderdi ama şu an resim analizi desteği yok. Kullanıcıya resim analizi için OpenAI API key gerektiğini söyle.' : ''}
 
 Kullanıcı basit bir selamlaşma mesajı gönderdiğinde (örn. 'merhaba', 'selam', 'hello' vb.) sadece nazik bir karşılama mesajı ile yanıt ver, ek bilgi veya özellik tanıtımı yapma.
 
@@ -138,23 +311,21 @@ Kripto paralar için getCoin, hisse senetleri için getStock aracını kullanabi
         stock: getStock ? 'Available' : 'Not found'
       });
       
-      // DeepSeek model
-      const deepseekModel = deepseek('deepseek-chat');
-      console.log('[CHAT API] DeepSeek model initialized');
-      
       console.log('[CHAT API] Using generateText to determine tool calls, then streamText for final response');
       
       // First call: Use generateText to potentially execute tools
       const initialResult = await generateText({
-        model: deepseekModel,
+        model,
         messages: formattedMessages as CoreMessage[],
         temperature: 0.7,
         tools: { getWeather, getEarthquake, getExchangeRate, getCoin, getStock },
       });
       
-      // Check if the initial result included tool calls AND results
-      if (initialResult.toolCalls.length > 0 && initialResult.toolResults.length > 0) {
-        console.log('[CHAT API] Tools were called. Generating final response based on tool results.');
+      // Check if the initial result included tool calls
+      if (initialResult.toolCalls.length > 0) {
+        console.log('[CHAT API] Tools were called. Processing tool results and streaming final response.');
+
+        const toolResults = initialResult.toolResults;
         
         // Construct the message history including tool interactions
         const messagesForFinalStream: CoreMessage[] = [
@@ -170,7 +341,7 @@ Kripto paralar için getCoin, hisse senetleri için getStock aracını kullanabi
             })),
           },
           // Tool messages reporting the results of the tool calls
-          ...initialResult.toolResults.map(toolResult => ({
+          ...toolResults.map(toolResult => ({
             role: 'tool' as const,
             content: [
               {
@@ -184,139 +355,54 @@ Kripto paralar için getCoin, hisse senetleri için getStock aracını kullanabi
         ];
 
         // Log the tool results for debugging
-        console.log('[CHAT API] Tool results:', initialResult.toolResults.map(tr => ({
+        console.log('[CHAT API] Tool results:', toolResults.map(tr => ({
           toolName: tr.toolName,
-          resultSummary: tr.result ? typeof tr.result : 'null'
+          resultSummary: tr.result ? (typeof tr.result === 'string' ? tr.result.slice(0,100) : typeof tr.result) : 'null'
         })));
         
-        // İkinci çağrı: streamsiz, düz JSON yanıt oluştur
-        console.log('[CHAT API] Generating final NON-STREAMING response based on tool results');
-        const finalResult = await generateText({
-          model: deepseekModel,
+        // İkinci çağrı: streamText kullanarak nihai yanıtı stream et
+        console.log('[CHAT API] Generating final STREAMING response based on tool results');
+        const result = streamText({
+          model,
           messages: messagesForFinalStream,
           temperature: 0.7,
+          onFinish: async ({ text, toolCalls, toolResults: finalToolResults, usage, finishReason }) => {
+            console.log('[CHAT API] Stream finished (with tools). Reason:', finishReason);
+            console.log('[CHAT API] Final text (with tools):', text ? text.slice(0, 100) + "..." : "No text");
+            
+            const finalMessages: CoreMessage[] = [
+                ...messagesForFinalStream,
+                { role: 'assistant', content: text || "" } // text boş veya undefined ise boş string
+            ];
+            if (text) { // Sadece metin varsa kaydet
+                 await saveChatToSupabase(sessionId as string, finalMessages);
+            }
+          },
+        });
+
+        return result.toTextStreamResponse();
+
+      } else {
+        // No tool calls, stream the response directly
+        console.log('[CHAT API] No tools called. Streaming response directly.');
+        const result = streamText({
+          model,
+          messages: formattedMessages as CoreMessage[],
+          temperature: 0.7,
+          onFinish: async ({ text, toolCalls, toolResults, usage, finishReason }) => {
+            console.log('[CHAT API] Stream finished (no tools). Reason:', finishReason);
+            console.log('[CHAT API] Final text (no tools):', text ? text.slice(0,100)+"..." : "No text");
+            const finalMessages: CoreMessage[] = [
+                ...formattedMessages as CoreMessage[],
+                { role: 'assistant', content: text || "" }
+            ];
+            if (text) { // Sadece metin varsa kaydet
+                 await saveChatToSupabase(sessionId as string, finalMessages);
+            }
+          }
         });
         
-        console.log('[CHAT API] Final response generated, returning JSON response');
-        
-        // Format response to include tool results for UI components
-        const response: any = { text: finalResult.text };
-        
-        // Check tool results and attach the appropriate data for UI components
-        for (const toolResult of initialResult.toolResults) {
-          if (toolResult.toolName === 'getWeather') {
-            response.weather_data = toolResult.result;
-          } else if (toolResult.toolName === 'getEarthquake') {
-            response.earthquake_data = toolResult.result;
-          } else if (toolResult.toolName === 'getExchangeRate') {
-            // Process exchange rate data to ensure it's in the correct format
-            const exchangeData = toolResult.result;
-            
-            // For conversion mode, format data specifically for the UI component
-            if (exchangeData && exchangeData.mode === 'convert') {
-              response.exchange_rate_data = {
-                mode: 'convert',
-                conversion: {
-                  from: {
-                    currency: exchangeData.conversion?.from?.currency || '',
-                    amount: exchangeData.conversion?.from?.amount || 0
-                  },
-                  to: exchangeData.conversion?.to || {}
-                },
-                date: exchangeData.date || new Date().toISOString().split('T')[0]
-              };
-              
-              // For conversion, preserve the original text to trigger simpleFormat
-              let detectedFromAmount = 0;
-              let detectedFromCurrency = '';
-              let detectedToCurrency = '';
-              
-              // Try to extract conversion info from the text
-              const text = finalResult.text || '';
-              const matches = text.match(/(\d+(?:[,.]\d+)?)\s*([A-Z]{3})\s*(?:to|=|in)\s*([A-Z]{3})/i);
-              
-              if (matches && matches.length >= 4) {
-                detectedFromAmount = parseFloat(matches[1].replace(',', '.'));
-                detectedFromCurrency = matches[2].toUpperCase();
-                detectedToCurrency = matches[3].toUpperCase();
-                
-                // Keep the text to ensure simpleFormat triggers
-                response.text = finalResult.text;
-              } else {
-                response.text = "İşte döviz kuru bilgisi:";
-              }
-            }
-            // Handle other exchange rate modes
-            else if (exchangeData && exchangeData.rates) {
-              response.exchange_rate_data = {
-                base: exchangeData.base,
-                date: exchangeData.date,
-                rates: exchangeData.rates
-              };
-              response.text = "İşte döviz kuru bilgisi:";
-            } 
-            else if (exchangeData && exchangeData.data) {
-              // Historical data format
-              response.exchange_rate_data = exchangeData;
-              response.text = "İşte tarihsel döviz kuru verileri:";
-            }
-            else if (typeof exchangeData === 'object') {
-              // If none of the above, just pass through the raw data
-              response.exchange_rate_data = exchangeData;
-              response.text = "İşte döviz kuru bilgisi:";
-            }
-          } else if (toolResult.toolName === 'getCoin') {
-            // Kripto para verilerini işle
-            console.log('[CHAT API] Received coin data:', JSON.stringify(toolResult.result).substring(0, 200) + '...');
-            response.coin_data = toolResult.result;
-            response.text = "İşte kripto para bilgisi:";
-          } else if (toolResult.toolName === 'getStock') {
-            // Hisse senedi verilerini işle
-            console.log('[CHAT API] Received stock data:', JSON.stringify(toolResult.result).substring(0, 200) + '...');
-            response.stock_data = toolResult.result;
-            response.text = "İşte hisse senedi bilgisi:";
-          }
-        }
-        
-        // Set simpler prompt text for non-exchange rate tools
-        if (response.weather_data) {
-          response.text = "İşte hava durumu bilgisi:";
-        } else if (response.earthquake_data) {
-          response.text = "İşte deprem bilgisi:";
-        }
-        
-        // Log the final response structure
-        console.log('[CHAT API] Response structure:', Object.keys(response));
-        console.log('[CHAT API] Has coin data:', !!response.coin_data);
-        console.log('[CHAT API] Has stock data:', !!response.stock_data);
-        
-        // ÖNEMLİ: Front-end için tüm yanıtı mesaj içeriği olarak JSON formatında gönder
-        const finalResponseForClient = {
-          text: response.text,
-          content: JSON.stringify(response)
-        };
-        
-        console.log('[CHAT API] Sending final JSON response to client');
-        
-        return new Response(
-          JSON.stringify(finalResponseForClient), 
-          { 
-            status: 200,
-            headers: { 'Content-Type': 'application/json' }
-          }
-        );
-      } else {
-        console.log('[CHAT API] No tools called or issue with results. Returning raw text as JSON.');
-        
-        // Stream yerine düz JSON yanıt döndür
-        const textToReturn = initialResult.text || "An unexpected error occurred.";
-        return new Response(
-          JSON.stringify({ text: textToReturn }),
-          {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' }
-          }
-        );
+        return result.toTextStreamResponse();
       }
       
     } catch (error: any) {
